@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import random
+from collections import deque
 
 # Global variables
 prev_frame = None
@@ -8,6 +9,7 @@ fruits = []
 bombs = []
 score = 0
 lives = 3
+trail_points = deque(maxlen=20)
 
 class Entity:
     def __init__(self, x, y, dy):
@@ -37,7 +39,24 @@ def detect_motion(frame, prev_frame):
     gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(gray, 25, 255, cv2.THRESH_BINARY)
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Find the largest contour and its centroid
+    if contours:
+        max_contour = max(contours, key=cv2.contourArea)
+        M = cv2.moments(max_contour)
+        if M["m00"] != 0:  # Avoid division by zero
+            cx = int(M["m10"] / M["m00"])
+            cy = int(M["m01"] / M["m00"])
+            trail_points.appendleft((cx, cy))
+    
     return contours
+
+def draw_trail(frame):
+    for i in range(1, len(trail_points)):
+        if trail_points[i - 1] is None or trail_points[i] is None:
+            continue
+        thickness = int(np.sqrt(20 / float(i + 1)) * 2.5)
+        cv2.line(frame, trail_points[i - 1], trail_points[i], (0, 255, 255), thickness)
 
 def main():
     global prev_frame, fruits, bombs, score, lives
@@ -80,6 +99,8 @@ def main():
                                 cap.release()
                                 cv2.destroyAllWindows()
                                 return
+
+        draw_trail(frame)
 
         fruits = [fruit for fruit in fruits if not fruit.sliced and fruit.y < frame.shape[0]]
         bombs = [bomb for bomb in bombs if not bomb.sliced and bomb.y < frame.shape[0]]
